@@ -3,6 +3,7 @@ from flask_socketio import SocketIO
 import paho.mqtt.client as mqtt
 import json
 import threading
+import ssl
 from datetime import datetime
 
 app = Flask(__name__)
@@ -21,12 +22,19 @@ voies = {
 
 historique = []
 
-# Client MQTT global (pour pouvoir publier depuis les routes)
 mqtt_client = mqtt.Client()
+mqtt_client.tls_set(ca_certs="mosquitto_ca.crt",
+                    certfile=None, keyfile=None,
+                    cert_reqs=ssl.CERT_REQUIRED,
+                    tls_version=ssl.PROTOCOL_TLSv1_2)
+mqtt_client.username_pw_set("rw", "readwrite")
 
 def on_connect(client, userdata, flags, rc):
-    print("✅ Connecté au broker MQTT")
-    client.subscribe("traffic/data")
+    if rc == 0:
+        print("✅ Connecté au broker MQTT (TLS)")
+        client.subscribe("traffic/data")
+    else:
+        print(f"❌ Échec connexion MQTT, code {rc}")
 
 def on_message(client, userdata, msg):
     global voies, historique
@@ -57,13 +65,11 @@ def on_message(client, userdata, msg):
 def demarrer_mqtt():
     mqtt_client.on_connect = on_connect
     mqtt_client.on_message = on_message
-    mqtt_client.connect("broker.emqx.io", 1883, 60)
+    mqtt_client.connect("test.mosquitto.org", 8883, 60)
     mqtt_client.loop_forever()
 
 thread = threading.Thread(target=demarrer_mqtt, daemon=True)
 thread.start()
-
-# --- Routes ---
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -88,7 +94,6 @@ def index():
         return redirect(url_for('login'))
     return render_template('dashboard.html')
 
-# --- Nouvelle route pour forcer le feu vert ---
 @app.route('/forcer_vert', methods=['POST'])
 def forcer_vert():
     if not session.get('logged_in'):
@@ -105,3 +110,6 @@ if __name__ == '__main__':
     import os
     port = int(os.environ.get('PORT', 5000))
     socketio.run(app, debug=False, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
+
+
+   
