@@ -23,10 +23,8 @@ voies = {
 historique = []
 
 mqtt_client = mqtt.Client()
-mqtt_client.tls_set(ca_certs="mosquitto_ca.crt",
-                    certfile=None, keyfile=None,
-                    cert_reqs=ssl.CERT_REQUIRED,
-                    tls_version=ssl.PROTOCOL_TLSv1_2)
+mqtt_client.tls_set(certfile=None, keyfile=None, cert_reqs=ssl.CERT_NONE, tls_version=ssl.PROTOCOL_TLSv1_2)
+mqtt_client.tls_insecure_set(True)
 mqtt_client.username_pw_set("rw", "readwrite")
 
 def on_connect(client, userdata, flags, rc):
@@ -57,10 +55,7 @@ def on_message(client, userdata, msg):
     if len(historique) > 20:
         historique.pop(0)
 
-    socketio.emit('update', {
-        "voies": voies,
-        "historique": historique
-    })
+    socketio.emit('update', {"voies": voies, "historique": historique})
 
 def demarrer_mqtt():
     mqtt_client.on_connect = on_connect
@@ -110,6 +105,3 @@ if __name__ == '__main__':
     import os
     port = int(os.environ.get('PORT', 5000))
     socketio.run(app, debug=False, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
-
-
-   
