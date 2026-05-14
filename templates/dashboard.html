@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Traffic Dashboard – 4 voies</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body { background: #1a1a2e; font-family: Arial; display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
+        .grille { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .carte { background: #16213e; border-radius: 20px; padding: 20px; text-align: center; color: white; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 220px; }
+        .carte h2 { margin: 0 0 10px 0; font-size: 1.3em; }
+        .feu { background: #0f3460; padding: 15px; border-radius: 15px; display: inline-block; }
+        .cercle { width: 45px; height: 45px; border-radius: 50%; background: #555; margin: 6px auto; }
+        .rouge.allume { background: #e74c3c; box-shadow: 0 0 20px #e74c3c; }
+        .jaune.allume { background: #f1c40f; box-shadow: 0 0 20px #f1c40f; }
+        .vert.allume { background: #2ecc71; box-shadow: 0 0 20px #2ecc71; }
+        .info { margin-top: 10px; font-size: 0.9em; }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-weight: bold; }
+        .FAIBLE { background: #27ae60; color: white; }
+        .MOYENNE { background: #f39c12; color: white; }
+        .ELEVEE { background: #e74c3c; color: white; }
+        .minuteur { font-size: 1.2em; font-weight: bold; margin-top: 8px; }
+        .btn-forcer { background: #e94560; color: white; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.8em; margin-top: 8px; }
+        .historique { background: #16213e; border-radius: 20px; padding: 20px; color: white; width: 90%; max-width: 600px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); margin-top: 20px; }
+        .historique h2 { margin: 0 0 10px 0; }
+        .liste { max-height: 200px; overflow-y: auto; }
+        .ligne { display: flex; justify-content: space-between; padding: 5px; border-bottom: 1px solid #0f3460; font-size: 0.85em; }
+        .logout-btn { background: #e94560; color: white; padding: 8px 15px; border-radius: 8px; text-decoration: none; display: inline-block; margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <div class="grille" id="grille"></div>
+    <a href="/logout" class="logout-btn">Déconnexion</a>
+    <div class="historique"><h2>Historique (20 derniers)</h2><div class="liste" id="historique"></div></div>
+
+    <script>
+        const voies = ["nord", "sud", "est", "ouest"];
+        const noms = {"nord":"Nord","sud":"Sud","est":"Est","ouest":"Ouest"};
+        const minuteurs = {};
+        const grille = document.getElementById('grille');
+        voies.forEach(v => {
+            const c = document.createElement('div');
+            c.className = 'carte';
+            c.id = 'carte-'+v;
+            c.innerHTML = `<h2>${noms[v]}</h2>
+                <div class="feu">
+                    <div class="cercle rouge" id="rouge-${v}"></div>
+                    <div class="cercle jaune" id="jaune-${v}"></div>
+                    <div class="cercle vert" id="vert-${v}"></div>
+                </div>
+                <div class="info">Densité : <span id="densite-${v}" class="badge">--</span></div>
+                <div class="minuteur" id="minuteur-${v}"></div>
+                <button class="btn-forcer" onclick="forcerVert('${v}')">Forcer vert</button>`;
+            grille.appendChild(c);
+        });
+        function forcerVert(v){ fetch('/forcer_vert',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'voie='+v}); }
+        const socket = io();
+        socket.on('update', (data) => {
+            const vd = data.voies, hist = data.historique;
+            voies.forEach(v => {
+                const e = vd[v]; if(!e) return;
+                document.getElementById('rouge-'+v).classList.remove('allume');
+                document.getElementById('jaune-'+v).classList.remove('allume');
+                document.getElementById('vert-'+v).classList.remove('allume');
+                if(e.feu==='ROUGE') document.getElementById('rouge-'+v).classList.add('allume');
+                else if(e.feu==='JAUNE') document.getElementById('jaune-'+v).classList.add('allume');
+                else if(e.feu==='VERT') document.getElementById('vert-'+v).classList.add('allume');
+                const b = document.getElementById('densite-'+v);
+                b.textContent = e.densite; b.className = 'badge '+e.densite;
+                demarrerMinuteur(v, e.duree, e.feu);
+            });
+            const liste = document.getElementById('historique');
+            liste.innerHTML = '';
+            hist.slice().reverse().forEach(ev => {
+                const div = document.createElement('div');
+                div.className = 'ligne';
+                div.innerHTML = `<span>${ev.heure}</span> <span>${ev.voie}</span> <span>${ev.feu}</span> <span>${ev.densite}</span> <span>${ev.duree}s</span>`;
+                liste.appendChild(div);
+            });
+        });
+        function demarrerMinuteur(voie, dureeDepart, feuActuel) {
+            if(minuteurs[voie]) clearInterval(minuteurs[voie]);
+            let temps = dureeDepart;
+            const elem = document.getElementById('minuteur-'+voie);
+            elem.textContent = temps+'s';
+            minuteurs[voie] = setInterval(() => {
+                temps--;
+                if(temps<0){ clearInterval(minuteurs[voie]); elem.textContent=''; return; }
+                elem.textContent = temps+'s';
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
